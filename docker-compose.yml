@@ -1,0 +1,140 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: observai-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: observai
+      MYSQL_USER: observai
+      MYSQL_PASSWORD: observai
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./docker/mysql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  nacos:
+    image: nacos/nacos-server:v2.4.3
+    container_name: observai-nacos
+    environment:
+      MODE: standalone
+      NACOS_AUTH_ENABLE: "false"
+    ports:
+      - "8848:8848"
+      - "9848:9848"
+
+  gateway-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      args:
+        SERVICE: gateway-service
+    environment:
+      NACOS_ADDR: nacos:8848
+      JWT_SECRET: ${JWT_SECRET:-observai-default-development-secret-key}
+    ports:
+      - "8080:8080"
+    depends_on:
+      - nacos
+
+  user-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      args:
+        SERVICE: user-service
+    environment:
+      NACOS_ADDR: nacos:8848
+      JWT_SECRET: ${JWT_SECRET:-observai-default-development-secret-key}
+    depends_on:
+      - nacos
+      - mysql
+
+  monitor-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      args:
+        SERVICE: monitor-service
+    environment:
+      NACOS_ADDR: nacos:8848
+    depends_on:
+      - nacos
+      - mysql
+      - alert-service
+
+  alert-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      args:
+        SERVICE: alert-service
+    environment:
+      NACOS_ADDR: nacos:8848
+      ALIYUN_AI_API_KEY: ${ALIYUN_AI_API_KEY:-}
+    depends_on:
+      - nacos
+      - mysql
+      - notification-service
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      args:
+        SERVICE: notification-service
+    environment:
+      NACOS_ADDR: nacos:8848
+      MAIL_HOST: ${MAIL_HOST:-}
+      MAIL_PORT: ${MAIL_PORT:-465}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+    depends_on:
+      - nacos
+      - mysql
+
+  demo-user-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      args:
+        SERVICE: monitored-services/demo-user-service
+    environment:
+      NACOS_ADDR: nacos:8848
+    depends_on:
+      - nacos
+
+  demo-order-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      args:
+        SERVICE: monitored-services/demo-order-service
+    environment:
+      NACOS_ADDR: nacos:8848
+    depends_on:
+      - nacos
+
+  demo-payment-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      args:
+        SERVICE: monitored-services/demo-payment-service
+    environment:
+      NACOS_ADDR: nacos:8848
+    depends_on:
+      - nacos
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "3000:80"
+    depends_on:
+      - gateway-service

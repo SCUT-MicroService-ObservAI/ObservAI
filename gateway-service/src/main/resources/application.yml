@@ -1,0 +1,37 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: gateway-service
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_ADDR:localhost:8848}
+    gateway:
+      discovery:
+        locator:
+          enabled: true
+      routes:
+        - id: user-service
+          uri: lb://user-service
+          predicates:
+            - Path=/login
+        - id: monitor-service
+          uri: lb://monitor-service
+          predicates:
+            - Path=/monitor/**,/alert-rules/**
+        - id: alert-service
+          uri: lb://alert-service
+          predicates:
+            - Path=/alerts/**
+        - id: notification-service
+          uri: lb://notification-service
+          predicates:
+            - Path=/notification/**,/notifications/**
+
+observai:
+  jwt:
+    secret: ${JWT_SECRET:observai-default-development-secret-key}
+    ttl-seconds: ${JWT_TTL_SECONDS:7200}
+

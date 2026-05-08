@@ -1,0 +1,15 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: alert-service
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_ADDR:localhost:8848}
+
+observai:
+  aliyun-ai:
+    api-key: ${ALIYUN_AI_API_KEY:}
+
