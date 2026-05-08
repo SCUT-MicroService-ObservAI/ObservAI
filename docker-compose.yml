@@ -8,8 +8,9 @@ services:
       MYSQL_USER: observai
       MYSQL_PASSWORD: observai
     ports:
-      - "3306:3306"
+      - "3307:3306"
     volumes:
+      - observai-mysql-data:/var/lib/mysql
       - ./docker/mysql:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
@@ -138,3 +139,6 @@ services:
       - "3000:80"
     depends_on:
       - gateway-service
+
+volumes:
+  observai-mysql-data:
