@@ -32,19 +32,18 @@ public class NotificationConfigController {
     }
 
     @PutMapping("/notification/configs/{id}")
-    public ApiResponse<NotificationConfig> update(@PathVariable Long id, @RequestBody NotificationConfig config) {
+    public ApiResponse<NotificationConfig> update(@PathVariable("id") Long id, @RequestBody NotificationConfig config) {
         return ApiResponse.success(service.update(id, config));
     }
 
     @PutMapping("/notification/configs/{id}/enabled")
-    public ApiResponse<NotificationConfig> setEnabled(@PathVariable Long id, @RequestBody ConfigEnabledRequest request) {
+    public ApiResponse<NotificationConfig> setEnabled(@PathVariable("id") Long id, @RequestBody ConfigEnabledRequest request) {
         return ApiResponse.success(service.setEnabled(id, request.enabled()));
     }
 
     @DeleteMapping("/notification/configs/{id}")
-    public ApiResponse<Void> delete(@PathVariable Long id) {
+    public ApiResponse<Void> delete(@PathVariable("id") Long id) {
         service.delete(id);
         return ApiResponse.success();
     }
 }
-

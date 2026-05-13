@@ -3,29 +3,31 @@ package com.observai.user.service;
 import com.observai.common.dto.LoginRequest;
 import com.observai.common.dto.LoginResponse;
 import com.observai.common.security.JwtTokenService;
-import java.util.Map;
+import com.observai.user.model.UserAccount;
+import com.observai.user.repository.UserRepository;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
-import org.springframework.http.HttpStatus;
 
 @Service
 public class AuthService {
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private final JwtTokenService jwtTokenService;
-    private final Map<String, String> users;
+    private final UserRepository userRepository;
 
-    public AuthService(JwtTokenService jwtTokenService) {
+    public AuthService(JwtTokenService jwtTokenService, UserRepository userRepository) {
         this.jwtTokenService = jwtTokenService;
-        this.users = Map.of("ops", passwordEncoder.encode("123456"));
+        this.userRepository = userRepository;
     }
 
     public LoginResponse login(LoginRequest request) {
-        String encodedPassword = users.get(request.username());
-        if (encodedPassword == null || !passwordEncoder.matches(request.password(), encodedPassword)) {
+        UserAccount user = userRepository.findByUsername(request.username())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "用户名或密码错误"));
+        if (!passwordEncoder.matches(request.password(), user.password())) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "用户名或密码错误");
         }
-        return new LoginResponse(jwtTokenService.createToken(request.username()), jwtTokenService.expiresInSeconds());
+        return new LoginResponse(jwtTokenService.createToken(user.username()), jwtTokenService.expiresInSeconds());
     }
 }
 
