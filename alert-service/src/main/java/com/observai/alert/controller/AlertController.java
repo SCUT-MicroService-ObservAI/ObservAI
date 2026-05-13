@@ -34,22 +34,21 @@ public class AlertController {
 
     @GetMapping("/alerts")
     public ApiResponse<List<AlertRecord>> list(
-            @RequestParam(required = false) String status,
-            @RequestParam(required = false) String serviceName,
-            @RequestParam(required = false) String severity,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime) {
+            @RequestParam(name = "status", required = false) String status,
+            @RequestParam(name = "serviceName", required = false) String serviceName,
+            @RequestParam(name = "severity", required = false) String severity,
+            @RequestParam(name = "startTime", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
+            @RequestParam(name = "endTime", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime) {
         return ApiResponse.success(alertService.list(status, serviceName, severity, startTime, endTime));
     }
 
     @GetMapping("/alerts/{id}")
-    public ApiResponse<AlertDetail> detail(@PathVariable Long id) {
+    public ApiResponse<AlertDetail> detail(@PathVariable("id") Long id) {
         return ApiResponse.success(alertService.detail(id));
     }
 
     @PutMapping("/alerts/{id}/status")
-    public ApiResponse<AlertRecord> updateStatus(@PathVariable Long id, @Valid @RequestBody AlertStatusUpdateRequest request) {
+    public ApiResponse<AlertRecord> updateStatus(@PathVariable("id") Long id, @Valid @RequestBody AlertStatusUpdateRequest request) {
         return ApiResponse.success(alertService.updateStatus(id, request));
     }
 }
-

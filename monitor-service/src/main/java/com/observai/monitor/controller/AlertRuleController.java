@@ -32,19 +32,18 @@ public class AlertRuleController {
     }
 
     @PutMapping("/alert-rules/{id}")
-    public ApiResponse<AlertRule> update(@PathVariable Long id, @RequestBody AlertRule rule) {
+    public ApiResponse<AlertRule> update(@PathVariable("id") Long id, @RequestBody AlertRule rule) {
         return ApiResponse.success(service.update(id, rule));
     }
 
     @PutMapping("/alert-rules/{id}/enabled")
-    public ApiResponse<AlertRule> setEnabled(@PathVariable Long id, @RequestBody RuleEnabledRequest request) {
+    public ApiResponse<AlertRule> setEnabled(@PathVariable("id") Long id, @RequestBody RuleEnabledRequest request) {
         return ApiResponse.success(service.setEnabled(id, request.enabled()));
     }
 
     @DeleteMapping("/alert-rules/{id}")
-    public ApiResponse<Void> delete(@PathVariable Long id) {
+    public ApiResponse<Void> delete(@PathVariable("id") Long id) {
         service.delete(id);
         return ApiResponse.success();
     }
 }
-

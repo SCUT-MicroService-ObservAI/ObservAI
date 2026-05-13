@@ -2,36 +2,59 @@ package com.observai.alert.repository;
 
 import com.observai.alert.model.AlertStatusHistory;
 import com.observai.common.enums.AlertStatus;
-import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.Comparator;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.atomic.AtomicLong;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 @Repository
 public class AlertStatusHistoryRepository {
-    private final AtomicLong ids = new AtomicLong(1);
-    private final CopyOnWriteArrayList<AlertStatusHistory> history = new CopyOnWriteArrayList<>();
+    private final JdbcTemplate jdbcTemplate;
+
+    public AlertStatusHistoryRepository(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }
 
     public void save(Long alertId, AlertStatus fromStatus, AlertStatus toStatus, String operator, String remark) {
-        history.add(new AlertStatusHistory(
-                ids.getAndIncrement(),
+        jdbcTemplate.update(
+                """
+                INSERT INTO alert_status_history
+                  (alert_id, from_status, to_status, operator, remark)
+                VALUES (?, ?, ?, ?, ?)
+                """,
                 alertId,
-                fromStatus,
-                toStatus,
+                fromStatus == null ? null : fromStatus.name(),
+                toStatus.name(),
                 operator == null ? "system" : operator,
-                remark,
-                LocalDateTime.now()
-        ));
+                remark
+        );
     }
 
     public List<AlertStatusHistory> findByAlertId(Long alertId) {
-        return new ArrayList<>(history).stream()
-                .filter(item -> alertId.equals(item.alertId()))
-                .sorted(Comparator.comparing(AlertStatusHistory::createdAt))
-                .toList();
+        return jdbcTemplate.query(
+                """
+                SELECT id, alert_id, from_status, to_status, operator, remark, created_at
+                FROM alert_status_history
+                WHERE alert_id = ?
+                ORDER BY created_at
+                """,
+                this::mapRow,
+                alertId
+        );
+    }
+
+    private AlertStatusHistory mapRow(ResultSet rs, int rowNum) throws SQLException {
+        String fromStatus = rs.getString("from_status");
+        return new AlertStatusHistory(
+                rs.getLong("id"),
+                rs.getLong("alert_id"),
+                fromStatus == null ? null : AlertStatus.valueOf(fromStatus),
+                AlertStatus.valueOf(rs.getString("to_status")),
+                rs.getString("operator"),
+                rs.getString("remark"),
+                rs.getTimestamp("created_at").toLocalDateTime()
+        );
     }
 }
 

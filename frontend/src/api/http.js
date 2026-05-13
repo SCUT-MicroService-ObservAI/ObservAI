@@ -19,6 +19,9 @@ http.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       clearToken()
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login'
+      }
     }
     return Promise.reject(error)
   }

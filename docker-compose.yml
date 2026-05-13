@@ -27,6 +27,12 @@ services:
     ports:
       - "8848:8848"
       - "9848:9848"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8848/nacos/actuator/health | grep -q UP"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
 
   gateway-service:
     build:
@@ -39,8 +45,10 @@ services:
       JWT_SECRET: ${JWT_SECRET:-observai-default-development-secret-key}
     ports:
       - "8080:8080"
+    restart: on-failure
     depends_on:
-      - nacos
+      nacos:
+        condition: service_healthy
 
   user-service:
     build:
@@ -51,9 +59,17 @@ services:
     environment:
       NACOS_ADDR: nacos:8848
       JWT_SECRET: ${JWT_SECRET:-observai-default-development-secret-key}
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: observai
+      MYSQL_USER: observai
+      MYSQL_PASSWORD: observai
+    restart: on-failure
     depends_on:
-      - nacos
-      - mysql
+      mysql:
+        condition: service_healthy
+      nacos:
+        condition: service_healthy
 
   monitor-service:
     build:
@@ -63,10 +79,19 @@ services:
         SERVICE: monitor-service
     environment:
       NACOS_ADDR: nacos:8848
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: observai
+      MYSQL_USER: observai
+      MYSQL_PASSWORD: observai
+    restart: on-failure
     depends_on:
-      - nacos
-      - mysql
-      - alert-service
+      nacos:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      alert-service:
+        condition: service_started
 
   alert-service:
     build:
@@ -77,10 +102,19 @@ services:
     environment:
       NACOS_ADDR: nacos:8848
       ALIYUN_AI_API_KEY: ${ALIYUN_AI_API_KEY:-}
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: observai
+      MYSQL_USER: observai
+      MYSQL_PASSWORD: observai
+    restart: on-failure
     depends_on:
-      - nacos
-      - mysql
-      - notification-service
+      nacos:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+      notification-service:
+        condition: service_started
 
   notification-service:
     build:
@@ -94,9 +128,17 @@ services:
       MAIL_PORT: ${MAIL_PORT:-465}
       MAIL_USERNAME: ${MAIL_USERNAME:-}
       MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: observai
+      MYSQL_USER: observai
+      MYSQL_PASSWORD: observai
+    restart: on-failure
     depends_on:
-      - nacos
-      - mysql
+      nacos:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
 
   demo-user-service:
     build:
@@ -106,8 +148,10 @@ services:
         SERVICE: monitored-services/demo-user-service
     environment:
       NACOS_ADDR: nacos:8848
+    restart: on-failure
     depends_on:
-      - nacos
+      nacos:
+        condition: service_healthy
 
   demo-order-service:
     build:
@@ -117,8 +161,10 @@ services:
         SERVICE: monitored-services/demo-order-service
     environment:
       NACOS_ADDR: nacos:8848
+    restart: on-failure
     depends_on:
-      - nacos
+      nacos:
+        condition: service_healthy
 
   demo-payment-service:
     build:
@@ -128,8 +174,10 @@ services:
         SERVICE: monitored-services/demo-payment-service
     environment:
       NACOS_ADDR: nacos:8848
+    restart: on-failure
     depends_on:
-      - nacos
+      nacos:
+        condition: service_healthy
 
   frontend:
     build:
@@ -138,7 +186,8 @@ services:
     ports:
       - "3000:80"
     depends_on:
-      - gateway-service
+      gateway-service:
+        condition: service_started
 
 volumes:
   observai-mysql-data:

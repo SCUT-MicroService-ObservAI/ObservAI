@@ -34,12 +34,11 @@ public class NotificationController {
 
     @GetMapping("/notification/records")
     public ApiResponse<List<NotificationRecord>> records(
-            @RequestParam(required = false) Long alertId,
-            @RequestParam(required = false) String email,
-            @RequestParam(required = false) NotificationStatus status,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime) {
+            @RequestParam(name = "alertId", required = false) Long alertId,
+            @RequestParam(name = "email", required = false) String email,
+            @RequestParam(name = "status", required = false) NotificationStatus status,
+            @RequestParam(name = "startTime", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime startTime,
+            @RequestParam(name = "endTime", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime endTime) {
         return ApiResponse.success(recordRepository.find(alertId, email, status, startTime, endTime));
     }
 }
-

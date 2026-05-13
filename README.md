@@ -1,6 +1,6 @@
 # ObservAI
 
-ObservAI 是根据 `AIOps_PRD.md` 搭建的 AI 运维助手演示框架。当前版本优先保证架构清晰、模块完整、职责边界正确，复杂业务细节使用可替换的内存仓储与 Mock 实现托底，后续可以逐步接入 MySQL、真实阿里云 AI API 和真实 SMTP 发送。
+ObservAI 是根据 `AIOps_PRD.md` 搭建的 AI 运维助手演示框架。当前版本优先保证架构清晰、模块完整、职责边界正确，核心业务数据已接入 MySQL 持久化，复杂外部能力仍使用可替换的 Mock 实现托底，后续可以继续接入真实阿里云 AI API 和真实 SMTP 发送。
 
 ## 模块划分
 
@@ -162,7 +162,9 @@ MAIL_PASSWORD=your-mail-auth-code
 
 - 已按 PRD 拆分微服务和前端页面，并保留清晰的 Service / Repository / Client 边界。
 - 后端接口统一返回 `code`、`message`、`data`。
+- `user-service` 已从 MySQL 读取账号，并使用 BCrypt 校验密码。
+- `monitor-service` 已将告警规则和服务指标写入 MySQL。
+- `alert-service` 已将告警记录和状态历史写入 MySQL。
+- `notification-service` 已将通知配置和通知记录写入 MySQL。
 - 告警服务已支持指纹去重、触发次数更新、异步 Mock 诊断、状态历史记录。
 - 通知服务已支持配置管理、级别过滤、发送结果记录；真实 SMTP 发送位置已预留。
-- 数据库表结构与初始化数据已准备好，但当前 Java 代码为了便于框架演示先使用内存仓储。
-

@@ -4,6 +4,11 @@ server:
 spring:
   application:
     name: notification-service
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3307}/${MYSQL_DATABASE:observai}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: ${MYSQL_USER:observai}
+    password: ${MYSQL_PASSWORD:observai}
+    driver-class-name: com.mysql.cj.jdbc.Driver
   cloud:
     nacos:
       discovery:
@@ -19,4 +24,3 @@ spring:
           auth: true
           ssl:
             enable: true
-
