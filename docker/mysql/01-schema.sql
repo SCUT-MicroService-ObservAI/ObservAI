@@ -4,6 +4,9 @@ CREATE DATABASE IF NOT EXISTS observai
 
 USE observai;
 
+-- 保证 init 脚本里的中文 COMMENT / 字符串按 UTF-8 写入，避免首次导入出现乱码
+SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS users (
   user_id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
   username VARCHAR(100) NOT NULL UNIQUE COMMENT '用户名',

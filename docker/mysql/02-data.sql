@@ -1,5 +1,7 @@
 USE observai;
 
+SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci;
+
 INSERT INTO users (user_id, username, password)
 VALUES
   (1, 'ops', '$2a$10$0xKQJlgeZqGaNk2iAXFJOOQCpvRnshv.1KOxNT8Xcu8gkAdUMalza')
