@@ -1,0 +1,2172 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "ObservAI API",
+    "description": "《AI 运维助手》接口说明：与 PRD **第 7 章 接口设计**对齐，并覆盖 **第 7.6 节** 被监控 demo 服务接口。\n\n**PRD 第 7 章与路径对照（经 API 网关）**\n\n| PRD | 方法 | 路径 |\n|-----|------|------|\n| 7.1.1 | POST | `/login` |\n| 7.2.1 | GET | `/monitor/services` |\n| 7.2.2 | GET | `/monitor/services/{serviceName}/metrics` |\n| 7.3.1 | GET | `/alert-rules` |\n| 7.3.2 | POST | `/alert-rules` |\n| 7.3.3 | PUT | `/alert-rules/{id}` |\n| 7.3.4 | PUT | `/alert-rules/{id}/enabled` |\n| 7.3.5 | DELETE | `/alert-rules/{id}` |\n| 7.4.1 | POST | `/alerts` |\n| 7.4.2 | GET | `/alerts` |\n| 7.4.3 | GET | `/alerts/{id}` |\n| 7.4.4 | PUT | `/alerts/{id}/status` |\n| 7.5.1 | GET | `/notification/configs` |\n| 7.5.2 | POST | `/notification/configs` |\n| 7.5.3 | PUT | `/notification/configs/{id}` |\n| 7.5.4 | DELETE | `/notification/configs/{id}` |\n| 7.5.5 | POST | `/notifications/send` |\n| 7.5.6 | GET | `/notification/records` |\n\n**PRD 第 7.6 节（被监控微服务）**\n\n`GET /health`、`GET /metrics`、`GET /test/error`、`GET /test/slow` 部署在各 demo 进程上，**不经过**网关。端口 **8091 / 8092 / 8093** 来自各模块 `application.yml` 的 `server.port`（`demo-user-service` / `demo-order-service` / `demo-payment-service`）。\n\n**在宿主机浏览器访问**：需将容器内该端口映射到本机。仓库 `docker-compose.yml` 已为三个 demo 配置 `ports: \"809x:809x\"`，执行 `docker compose up` 后可用 `http://localhost:8091/health` 等访问。若未用 Compose、仅在 Docker 内网访问，则应使用服务名与端口（如 `http://demo-order-service:8092`），或由 `monitor-service` 在容器网络内采集。\n\n**调用约定**\n\n- 除 `POST /login` 与 PRD 7.6 四类接口外，请求头需携带 `Authorization: Bearer <token>`。\n- 网关业务接口成功响应体为 `{ \"code\": 0, \"message\": \"success\", \"data\": ... }`（见 PRD 4.8）。\n- 常用 `code` 见 components 中 `ErrorCodes`。\n\n**Apifox / Postman 调试**\n\n- 先请求 `POST /login` 取得 `data.token`，再在需鉴权接口的 **Header** 增加：`Authorization: Bearer <token>`（`Bearer` 后有一个空格）。\n- 经前端反代时 URL 为 `http://localhost:3000/api` 与路径**直接拼接**，中间**不得有空格**（错误示例：`/api /monitor/services`）。\n- 未带 Token、Token 过期或无效时，网关返回 **HTTP 401**，body 形如 `{ \"code\": 401, \"message\": \"JWT 无效\", \"data\": null }`；各接口已声明 `401` 响应用于契约校验。\n",
+    "version": "0.1.0"
+  },
+  "tags": [
+    {
+      "name": "Auth"
+    },
+    {
+      "name": "Monitor"
+    },
+    {
+      "name": "AlertRules"
+    },
+    {
+      "name": "Alerts"
+    },
+    {
+      "name": "Notifications"
+    },
+    {
+      "name": "DemoMonitored"
+    }
+  ],
+  "paths": {
+    "/login": {
+      "post": {
+        "summary": "用户登录（PRD 7.1.1）",
+        "deprecated": false,
+        "description": "",
+        "tags": [
+          "Auth"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              },
+              "example": {
+                "username": "ops",
+                "password": "123456"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "成功返回 JWT（PRD 7.1.1）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseLoginResponse"
+                },
+                "example": {
+                  "code": 0,
+                  "message": "success",
+                  "data": {
+                    "token": "jwt-token",
+                    "expiresIn": 7200
+                  }
+                }
+              }
+            },
+            "headers": {}
+          },
+          "400": {
+            "description": "参数校验失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseError"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/monitor/services": {
+      "get": {
+        "summary": "查询最新服务状态（PRD 7.2.1）",
+        "deprecated": false,
+        "description": "",
+        "tags": [
+          "Monitor"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK（PRD 7.2.1）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseServiceMetricViewList"
+                },
+                "example": {
+                  "code": 0,
+                  "message": "success",
+                  "data": [
+                    {
+                      "serviceName": "demo-order-service",
+                      "cpu": 85.2,
+                      "memory": 70.5,
+                      "requestCount": 1200,
+                      "errorRate": 12.3,
+                      "responseTime": 520,
+                      "status": "ABNORMAL",
+                      "timestamp": "2026-05-08T10:00:00"
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {}
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized",
+            "description": "未携带 `Authorization`、Token 过期/无效，或 `JWT_SECRET` 与签发端不一致。\n请先 `POST /login`，再设置 Header `Authorization: Bearer <data.token>`。\n"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/monitor/services/{serviceName}/metrics": {
+      "get": {
+        "summary": "查询服务指标历史（PRD 7.2.2）",
+        "deprecated": false,
+        "description": "",
+        "tags": [
+          "Monitor"
+        ],
+        "parameters": [
+          {
+            "name": "serviceName",
+            "in": "path",
+            "description": "",
+            "required": true,
+            "example": "demo-order-service",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "startTime",
+            "in": "query",
+            "description": "",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "endTime",
+            "in": "query",
+            "description": "",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseServiceMetricViewList"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized",
+            "description": "未携带 `Authorization`、Token 过期/无效，或 `JWT_SECRET` 与签发端不一致。\n请先 `POST /login`，再设置 Header `Authorization: Bearer <data.token>`。\n"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/monitor/collect": {
+      "post": {
+        "summary": "立即触发一轮指标采集",
+        "deprecated": false,
+        "description": "",
+        "tags": [
+          "Monitor"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseVoid"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized",
+            "description": "未携带 `Authorization`、Token 过期/无效，或 `JWT_SECRET` 与签发端不一致。\n请先 `POST /login`，再设置 Header `Authorization: Bearer <data.token>`。\n"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/alert-rules": {
+      "get": {
+        "summary": "查询告警规则（PRD 7.3.1）",
+        "deprecated": false,
+        "description": "",
+        "tags": [
+          "AlertRules"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseAlertRuleList"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized",
+            "description": "未携带 `Authorization`、Token 过期/无效，或 `JWT_SECRET` 与签发端不一致。\n请先 `POST /login`，再设置 Header `Authorization: Bearer <data.token>`。\n"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "summary": "新增告警规则（PRD 7.3.2）",
+        "deprecated": false,
+        "description": "",
+        "tags": [
+          "AlertRules"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlertRule"
+              },
+              "example": {
+                "serviceName": "demo-order-service",
+                "metricName": "errorRate",
+                "operator": ">",
+                "threshold": 10,
+                "durationSeconds": 60,
+                "severity": "HIGH",
+                "enabled": true
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseAlertRule"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized",
+            "description": "未携带 `Authorization`、Token 过期/无效，或 `JWT_SECRET` 与签发端不一致。\n请先 `POST /login`，再设置 Header `Authorization: Bearer <data.token>`。\n"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/alert-rules/{id}": {
+      "put": {
+        "summary": "修改告警规则（PRD 7.3.3）",
+        "deprecated": false,
+        "description": "",
+        "tags": [
+          "AlertRules"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "serviceName": {
+                    "type": "string"
+                  },
+                  "metricName": {
+                    "type": "string"
+                  },
+                  "operator": {
+                    "type": "string"
+                  },
+                  "threshold": {
+                    "type": "integer"
+                  },
+                  "durationSeconds": {
+                    "type": "integer"
+                  },
+                  "severity": {
+                    "type": "string"
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "serviceName",
+                  "metricName",
+                  "operator",
+                  "threshold",
+                  "durationSeconds",
+                  "severity",
+                  "enabled"
+                ]
+              },
+              "example": {
+                "serviceName": "demo-order-service",
+                "metricName": "errorRate",
+                "operator": ">",
+                "threshold": 10,
+                "durationSeconds": 60,
+                "severity": "HIGH",
+                "enabled": true
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseAlertRule"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized",
+            "description": "未携带 `Authorization`、Token 过期/无效，或 `JWT_SECRET` 与签发端不一致。\n请先 `POST /login`，再设置 Header `Authorization: Bearer <data.token>`。\n"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "delete": {
+        "summary": "删除告警规则（PRD 7.3.5）",
+        "deprecated": false,
+        "description": "",
+        "tags": [
+          "AlertRules"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "",
+            "required": true,
+            "example": 0,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseVoid"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized",
+            "description": "未携带 `Authorization`、Token 过期/无效，或 `JWT_SECRET` 与签发端不一致。\n请先 `POST /login`，再设置 Header `Authorization: Bearer <data.token>`。\n"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/alert-rules/{id}/enabled": {
+      "put": {
+        "summary": "启用或停用告警规则（PRD 7.3.4）",
+        "deprecated": false,
+        "description": "",
+        "tags": [
+          "AlertRules"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "",
+            "required": true,
+            "example": 0,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuleEnabledRequest"
+              },
+              "example": {
+                "enabled": false
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseAlertRule"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized",
+            "description": "未携带 `Authorization`、Token 过期/无效，或 `JWT_SECRET` 与签发端不一致。\n请先 `POST /login`，再设置 Header `Authorization: Bearer <data.token>`。\n"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/alerts": {
+      "get": {
+        "summary": "查询告警列表（PRD 7.4.2）",
+        "deprecated": false,
+        "description": "",
+        "tags": [
+          "Alerts"
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "description": "",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/AlertStatus"
+            }
+          },
+          {
+            "name": "serviceName",
+            "in": "query",
+            "description": "",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "severity",
+            "in": "query",
+            "description": "",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/Severity"
+            }
+          },
+          {
+            "name": "startTime",
+            "in": "query",
+            "description": "",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "endTime",
+            "in": "query",
+            "description": "",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseAlertRecordList"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized",
+            "description": "未携带 `Authorization`、Token 过期/无效，或 `JWT_SECRET` 与签发端不一致。\n请先 `POST /login`，再设置 Header `Authorization: Bearer <data.token>`。\n"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "summary": "创建告警（PRD 7.4.1）",
+        "deprecated": false,
+        "description": "",
+        "tags": [
+          "Alerts"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlertCreateRequest"
+              },
+              "example": {
+                "serviceName": "demo-order-service",
+                "alertType": "ERROR_RATE_HIGH",
+                "metricName": "errorRate",
+                "severity": "HIGH",
+                "metricsSnapshot": {
+                  "cpu": 85.2,
+                  "memory": 70.5,
+                  "requestCount": 1200,
+                  "errorRate": 12.3,
+                  "responseTime": 520
+                },
+                "logSnippet": "java.lang.RuntimeException: order create failed..."
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK（PRD 7.4.1 响应示例）",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseAlertCreateResponse"
+                },
+                "example": {
+                  "code": 0,
+                  "message": "success",
+                  "data": {
+                    "alertId": 1001,
+                    "status": "UNHANDLED",
+                    "diagnosisStatus": "PENDING",
+                    "deduplicated": false
+                  }
+                }
+              }
+            },
+            "headers": {}
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized",
+            "description": "未携带 `Authorization`、Token 过期/无效，或 `JWT_SECRET` 与签发端不一致。\n请先 `POST /login`，再设置 Header `Authorization: Bearer <data.token>`。\n"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/alerts/{id}": {
+      "get": {
+        "summary": "查询告警详情（PRD 7.4.3）",
+        "deprecated": false,
+        "description": "",
+        "tags": [
+          "Alerts"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "",
+            "required": true,
+            "example": 0,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseAlertDetail"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized",
+            "description": "未携带 `Authorization`、Token 过期/无效，或 `JWT_SECRET` 与签发端不一致。\n请先 `POST /login`，再设置 Header `Authorization: Bearer <data.token>`。\n"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/alerts/{id}/status": {
+      "put": {
+        "summary": "修改告警状态（PRD 7.4.4）",
+        "deprecated": false,
+        "description": "",
+        "tags": [
+          "Alerts"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "",
+            "required": true,
+            "example": 0,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlertStatusUpdateRequest"
+              },
+              "example": {
+                "status": "PROCESSING",
+                "remark": "已开始排查订单服务异常"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseAlertRecord"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized",
+            "description": "未携带 `Authorization`、Token 过期/无效，或 `JWT_SECRET` 与签发端不一致。\n请先 `POST /login`，再设置 Header `Authorization: Bearer <data.token>`。\n"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/notification/configs": {
+      "get": {
+        "summary": "查询邮件通知配置（PRD 7.5.1）",
+        "deprecated": false,
+        "description": "",
+        "tags": [
+          "Notifications"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseNotificationConfigList"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized",
+            "description": "未携带 `Authorization`、Token 过期/无效，或 `JWT_SECRET` 与签发端不一致。\n请先 `POST /login`，再设置 Header `Authorization: Bearer <data.token>`。\n"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "post": {
+        "summary": "新增邮件通知配置（PRD 7.5.2）",
+        "deprecated": false,
+        "description": "",
+        "tags": [
+          "Notifications"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationConfig"
+              },
+              "example": {
+                "email": "ops@example.com",
+                "minSeverity": "HIGH",
+                "enabled": true
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseNotificationConfig"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized",
+            "description": "未携带 `Authorization`、Token 过期/无效，或 `JWT_SECRET` 与签发端不一致。\n请先 `POST /login`，再设置 Header `Authorization: Bearer <data.token>`。\n"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/notification/configs/{id}": {
+      "put": {
+        "summary": "修改邮件通知配置（PRD 7.5.3）",
+        "deprecated": false,
+        "description": "",
+        "tags": [
+          "Notifications"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "",
+            "required": true,
+            "example": 0,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string"
+                  },
+                  "minSeverity": {
+                    "type": "string"
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "email",
+                  "minSeverity",
+                  "enabled"
+                ]
+              },
+              "example": {
+                "email": "ops@example.com",
+                "minSeverity": "HIGH",
+                "enabled": true
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseNotificationConfig"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized",
+            "description": "未携带 `Authorization`、Token 过期/无效，或 `JWT_SECRET` 与签发端不一致。\n请先 `POST /login`，再设置 Header `Authorization: Bearer <data.token>`。\n"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      },
+      "delete": {
+        "summary": "删除邮件通知配置（PRD 7.5.4）",
+        "deprecated": false,
+        "description": "",
+        "tags": [
+          "Notifications"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "",
+            "required": true,
+            "example": 0,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseVoid"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized",
+            "description": "未携带 `Authorization`、Token 过期/无效，或 `JWT_SECRET` 与签发端不一致。\n请先 `POST /login`，再设置 Header `Authorization: Bearer <data.token>`。\n"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/notification/configs/{id}/enabled": {
+      "put": {
+        "summary": "启用或停用邮件配置",
+        "deprecated": false,
+        "description": "",
+        "tags": [
+          "Notifications"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "",
+            "required": true,
+            "example": 0,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "enabled"
+                ]
+              },
+              "example": {
+                "enabled": true
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseNotificationConfig"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized",
+            "description": "未携带 `Authorization`、Token 过期/无效，或 `JWT_SECRET` 与签发端不一致。\n请先 `POST /login`，再设置 Header `Authorization: Bearer <data.token>`。\n"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/notifications/send": {
+      "post": {
+        "summary": "发送邮件通知（PRD 7.5.5）",
+        "deprecated": false,
+        "description": "",
+        "tags": [
+          "Notifications"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotificationSendRequest"
+              },
+              "example": {
+                "alertId": 1001,
+                "serviceName": "demo-order-service",
+                "alertType": "ERROR_RATE_HIGH",
+                "severity": "HIGH",
+                "diagnosisSummary": "订单服务运行时异常导致错误率升高",
+                "suggestion": "检查订单创建逻辑、数据库连接和最近发布记录"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseVoid"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized",
+            "description": "未携带 `Authorization`、Token 过期/无效，或 `JWT_SECRET` 与签发端不一致。\n请先 `POST /login`，再设置 Header `Authorization: Bearer <data.token>`。\n"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/notification/records": {
+      "get": {
+        "summary": "查询通知记录（PRD 7.5.6）",
+        "deprecated": false,
+        "description": "",
+        "tags": [
+          "Notifications"
+        ],
+        "parameters": [
+          {
+            "name": "alertId",
+            "in": "query",
+            "description": "",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "email",
+            "in": "query",
+            "description": "",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "description": "",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/NotificationStatus"
+            }
+          },
+          {
+            "name": "startTime",
+            "in": "query",
+            "description": "",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "endTime",
+            "in": "query",
+            "description": "",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponseNotificationRecordList"
+                }
+              }
+            },
+            "headers": {}
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized",
+            "description": "未携带 `Authorization`、Token 过期/无效，或 `JWT_SECRET` 与签发端不一致。\n请先 `POST /login`，再设置 Header `Authorization: Bearer <data.token>`。\n"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "健康检查（PRD 7.6.1）",
+        "deprecated": false,
+        "description": "",
+        "tags": [
+          "DemoMonitored"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DemoHealthResponse"
+                },
+                "example": {
+                  "status": "UP"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/metrics": {
+      "get": {
+        "summary": "指标查询（PRD 7.6.2）",
+        "deprecated": false,
+        "description": "",
+        "tags": [
+          "DemoMonitored"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DemoMetricsResponse"
+                },
+                "example": {
+                  "cpu": 85.2,
+                  "memory": 70.5,
+                  "requestCount": 1200,
+                  "errorRate": 12.3,
+                  "responseTime": 520
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/test/error": {
+      "get": {
+        "summary": "模拟异常日志（PRD 7.6.3）",
+        "deprecated": false,
+        "description": "",
+        "tags": [
+          "DemoMonitored"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {}
+              },
+              "examples": {}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "异常日志片段（实现可为纯文本）",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "java.lang.RuntimeException: order create failed, database connection timeout"
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/test/slow": {
+      "get": {
+        "summary": "模拟慢接口（PRD 7.6.4）",
+        "deprecated": false,
+        "description": "",
+        "tags": [
+          "DemoMonitored"
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {}
+                },
+                "example": {
+                  "result": "slow order endpoint finished"
+                }
+              }
+            },
+            "headers": {}
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Severity": {
+        "type": "string",
+        "enum": [
+          "LOW",
+          "MEDIUM",
+          "HIGH",
+          "CRITICAL"
+        ]
+      },
+      "AlertStatus": {
+        "type": "string",
+        "enum": [
+          "UNHANDLED",
+          "PROCESSING",
+          "RESOLVED",
+          "IGNORED",
+          "FALSE_ALARM",
+          "RECOVERED"
+        ]
+      },
+      "DiagnosisStatus": {
+        "type": "string",
+        "enum": [
+          "PENDING",
+          "RUNNING",
+          "SUCCESS",
+          "FAILED",
+          "MOCKED"
+        ]
+      },
+      "NotificationStatus": {
+        "type": "string",
+        "enum": [
+          "PENDING",
+          "SUCCESS",
+          "FAILED",
+          "SKIPPED"
+        ]
+      },
+      "ServiceHealthStatus": {
+        "type": "string",
+        "enum": [
+          "UP",
+          "DOWN",
+          "ABNORMAL"
+        ]
+      },
+      "DemoHealthResponse": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "UP"
+          }
+        }
+      },
+      "DemoMetricsResponse": {
+        "type": "object",
+        "required": [
+          "cpu",
+          "memory",
+          "requestCount",
+          "errorRate",
+          "responseTime"
+        ],
+        "properties": {
+          "cpu": {
+            "type": "number",
+            "format": "double"
+          },
+          "memory": {
+            "type": "number",
+            "format": "double"
+          },
+          "requestCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "errorRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "responseTime": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "properties": {
+          "username": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          }
+        }
+      },
+      "LoginResponse": {
+        "type": "object",
+        "required": [
+          "token",
+          "expiresIn"
+        ],
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "expiresIn": {
+            "type": "integer",
+            "format": "int64",
+            "description": "有效期（秒）"
+          }
+        }
+      },
+      "MetricsSnapshot": {
+        "type": "object",
+        "required": [
+          "cpu",
+          "memory",
+          "requestCount",
+          "errorRate",
+          "responseTime"
+        ],
+        "properties": {
+          "cpu": {
+            "type": "number",
+            "format": "double"
+          },
+          "memory": {
+            "type": "number",
+            "format": "double"
+          },
+          "requestCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "errorRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "responseTime": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "ServiceMetricView": {
+        "type": "object",
+        "properties": {
+          "serviceName": {
+            "type": "string"
+          },
+          "cpu": {
+            "type": "number",
+            "format": "double"
+          },
+          "memory": {
+            "type": "number",
+            "format": "double"
+          },
+          "requestCount": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "errorRate": {
+            "type": "number",
+            "format": "double"
+          },
+          "responseTime": {
+            "type": "number",
+            "format": "double"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ServiceHealthStatus"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AlertRule": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "serviceName": {
+            "type": "string"
+          },
+          "metricName": {
+            "type": "string",
+            "description": "如 cpu、memory、errorRate、responseTime、requestCount"
+          },
+          "operator": {
+            "type": "string",
+            "description": "比较符，如 >、>=、<、<=、=="
+          },
+          "threshold": {
+            "type": "number",
+            "format": "double"
+          },
+          "durationSeconds": {
+            "type": "integer"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/Severity"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "RuleEnabledRequest": {
+        "type": "object",
+        "required": [
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AlertCreateRequest": {
+        "type": "object",
+        "required": [
+          "serviceName",
+          "alertType",
+          "metricName",
+          "severity",
+          "metricsSnapshot"
+        ],
+        "properties": {
+          "serviceName": {
+            "type": "string"
+          },
+          "alertType": {
+            "type": "string"
+          },
+          "metricName": {
+            "type": "string"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/Severity"
+          },
+          "metricsSnapshot": {
+            "$ref": "#/components/schemas/MetricsSnapshot"
+          },
+          "logSnippet": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "AlertCreateResponse": {
+        "type": "object",
+        "properties": {
+          "alertId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AlertStatus"
+          },
+          "diagnosisStatus": {
+            "$ref": "#/components/schemas/DiagnosisStatus"
+          },
+          "deduplicated": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AlertStatusUpdateRequest": {
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/AlertStatus"
+          },
+          "remark": {
+            "type": "string",
+            "nullable": true
+          },
+          "operator": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "DiagnosisResult": {
+        "type": "object",
+        "properties": {
+          "faultType": {
+            "type": "string"
+          },
+          "rootCause": {
+            "type": "string"
+          },
+          "impactScope": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "suggestionSteps": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "rollbackSuggestion": {
+            "type": "string"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/Severity"
+          },
+          "confidence": {
+            "type": "number",
+            "format": "double"
+          },
+          "needManualHandle": {
+            "type": "boolean"
+          },
+          "diagnosedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "source": {
+            "type": "string",
+            "description": "如 ALIYUN_AI、MOCK"
+          }
+        }
+      },
+      "AlertRecord": {
+        "type": "object",
+        "properties": {
+          "alertId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "serviceName": {
+            "type": "string"
+          },
+          "alertType": {
+            "type": "string"
+          },
+          "metricName": {
+            "type": "string"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/Severity"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AlertStatus"
+          },
+          "fingerprint": {
+            "type": "string"
+          },
+          "triggerCount": {
+            "type": "integer"
+          },
+          "metricsSnapshot": {
+            "$ref": "#/components/schemas/MetricsSnapshot"
+          },
+          "logSnippet": {
+            "type": "string",
+            "nullable": true
+          },
+          "diagnosisStatus": {
+            "$ref": "#/components/schemas/DiagnosisStatus"
+          },
+          "diagnosisResult": {
+            "$ref": "#/components/schemas/DiagnosisResult",
+            "nullable": true
+          },
+          "firstTriggeredAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "lastTriggeredAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "recoveredAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "AlertStatusHistory": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "alertId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "fromStatus": {
+            "$ref": "#/components/schemas/AlertStatus",
+            "nullable": true
+          },
+          "toStatus": {
+            "$ref": "#/components/schemas/AlertStatus"
+          },
+          "operator": {
+            "type": "string"
+          },
+          "remark": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AlertDetail": {
+        "type": "object",
+        "properties": {
+          "alert": {
+            "$ref": "#/components/schemas/AlertRecord"
+          },
+          "statusHistory": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AlertStatusHistory"
+            }
+          }
+        }
+      },
+      "NotificationConfig": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "email": {
+            "type": "string"
+          },
+          "minSeverity": {
+            "$ref": "#/components/schemas/Severity"
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "NotificationSendRequest": {
+        "type": "object",
+        "required": [
+          "alertId",
+          "serviceName",
+          "alertType",
+          "severity"
+        ],
+        "properties": {
+          "alertId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "serviceName": {
+            "type": "string"
+          },
+          "alertType": {
+            "type": "string"
+          },
+          "severity": {
+            "$ref": "#/components/schemas/Severity"
+          },
+          "diagnosisSummary": {
+            "type": "string",
+            "nullable": true
+          },
+          "suggestion": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "NotificationRecord": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "alertId": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "email": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/NotificationStatus"
+          },
+          "errorMessage": {
+            "type": "string",
+            "nullable": true
+          },
+          "sentAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ApiResponseLoginResponse": {
+        "type": "object",
+        "required": [
+          "code",
+          "message",
+          "data"
+        ],
+        "properties": {
+          "code": {
+            "type": "integer",
+            "example": 0
+          },
+          "message": {
+            "type": "string",
+            "example": "success"
+          },
+          "data": {
+            "$ref": "#/components/schemas/LoginResponse"
+          }
+        }
+      },
+      "ApiResponseError": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "非 0 业务码（PRD 4.8，见 ErrorCodes）"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "type": "null"
+          }
+        },
+        "example": {
+          "code": 401,
+          "message": "JWT 已过期或无效",
+          "data": null
+        }
+      },
+      "ApiResponseVoid": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "type": "null"
+          }
+        }
+      },
+      "ApiResponseServiceMetricViewList": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServiceMetricView"
+            }
+          }
+        }
+      },
+      "ApiResponseAlertRule": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/AlertRule"
+          }
+        }
+      },
+      "ApiResponseAlertRuleList": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AlertRule"
+            }
+          }
+        }
+      },
+      "ApiResponseAlertRecord": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/AlertRecord"
+          }
+        }
+      },
+      "ApiResponseAlertRecordList": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AlertRecord"
+            }
+          }
+        }
+      },
+      "ApiResponseAlertCreateResponse": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/AlertCreateResponse"
+          }
+        }
+      },
+      "ApiResponseAlertDetail": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/AlertDetail"
+          }
+        }
+      },
+      "ApiResponseNotificationConfig": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/NotificationConfig"
+          }
+        }
+      },
+      "ApiResponseNotificationConfigList": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NotificationConfig"
+            }
+          }
+        }
+      },
+      "ApiResponseNotificationRecordList": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NotificationRecord"
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "Unauthorized": {
+        "description": "未携带 `Authorization`、Token 过期/无效，或 `JWT_SECRET` 与签发端不一致。\n请先 `POST /login`，再设置 Header `Authorization: Bearer <data.token>`。\n",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ApiResponseError"
+            },
+            "examples": {
+              "成功示例": {
+                "summary": "成功示例",
+                "value": {
+                  "code": 401,
+                  "message": "JWT 无效",
+                  "data": null
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "PRD 3.1：登录成功后由请求头 Authorization Bearer 携带 JWT，经 Gateway 统一校验"
+      }
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080",
+      "description": "API 网关（Compose 映射）"
+    },
+    {
+      "url": "http://localhost:3000/api",
+      "description": "前端 Nginx 反代（与网关路径一致）"
+    },
+    {
+      "url": "http://localhost:8092",
+      "description": "demo-order-service 直连（8091 用户 / 8093 支付见各路径下 Server）"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ]
+}
