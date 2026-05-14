@@ -22,6 +22,8 @@ public class AlertRecord {
     private DiagnosisResult diagnosisResult;
     private LocalDateTime firstTriggeredAt;
     private LocalDateTime lastTriggeredAt;
+    /** 最近一次成功尝试发送通知的时间；合并同一未结束指纹时不重复走诊断/通知流程 */
+    private LocalDateTime lastNotifiedAt;
     private LocalDateTime recoveredAt;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
@@ -54,6 +56,8 @@ public class AlertRecord {
     public void setFirstTriggeredAt(LocalDateTime firstTriggeredAt) { this.firstTriggeredAt = firstTriggeredAt; }
     public LocalDateTime getLastTriggeredAt() { return lastTriggeredAt; }
     public void setLastTriggeredAt(LocalDateTime lastTriggeredAt) { this.lastTriggeredAt = lastTriggeredAt; }
+    public LocalDateTime getLastNotifiedAt() { return lastNotifiedAt; }
+    public void setLastNotifiedAt(LocalDateTime lastNotifiedAt) { this.lastNotifiedAt = lastNotifiedAt; }
     public LocalDateTime getRecoveredAt() { return recoveredAt; }
     public void setRecoveredAt(LocalDateTime recoveredAt) { this.recoveredAt = recoveredAt; }
     public LocalDateTime getCreatedAt() { return createdAt; }

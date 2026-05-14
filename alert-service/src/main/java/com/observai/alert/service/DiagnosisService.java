@@ -40,6 +40,7 @@ public class DiagnosisService {
                     result.rootCause(),
                     String.join("；", result.suggestionSteps())
             ));
+            alertServiceAccessor.updateLastNotifiedAt(alert.getAlertId(), LocalDateTime.now());
         } catch (RuntimeException ignored) {
             // 通知失败不能影响告警与诊断主流程。
         }

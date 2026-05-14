@@ -92,6 +92,7 @@ public class AlertService {
     private AlertRecord updateDuplicated(AlertRecord alert, AlertCreateRequest request) {
         alert.setTriggerCount(alert.getTriggerCount() + 1);
         alert.setLastTriggeredAt(LocalDateTime.now());
+        alert.setSeverity(request.severity());
         alert.setMetricsSnapshot(request.metricsSnapshot());
         alert.setLogSnippet(request.logSnippet());
         return alertRepository.save(alert);

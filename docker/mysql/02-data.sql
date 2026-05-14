@@ -32,7 +32,7 @@ VALUES
 INSERT INTO alerts
   (alert_id, service_name, alert_type, metric_name, severity, status, fingerprint, trigger_count,
    metrics_snapshot, log_snippet, diagnosis_status, diagnosis_result,
-   first_triggered_at, last_triggered_at, created_at, updated_at)
+   first_triggered_at, last_triggered_at, last_notified_at, created_at, updated_at)
 VALUES
   (
     1001,
@@ -60,6 +60,7 @@ VALUES
     ),
     NOW() - INTERVAL 4 MINUTE,
     NOW() - INTERVAL 1 MINUTE,
+    NULL,
     NOW() - INTERVAL 4 MINUTE,
     NOW() - INTERVAL 1 MINUTE
   )
