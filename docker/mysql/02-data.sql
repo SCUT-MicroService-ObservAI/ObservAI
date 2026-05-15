@@ -1,5 +1,7 @@
 USE observai;
 
+SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci;
+
 INSERT INTO users (user_id, username, password)
 VALUES
   (1, 'ops', '$2a$10$0xKQJlgeZqGaNk2iAXFJOOQCpvRnshv.1KOxNT8Xcu8gkAdUMalza')
@@ -30,7 +32,7 @@ VALUES
 INSERT INTO alerts
   (alert_id, service_name, alert_type, metric_name, severity, status, fingerprint, trigger_count,
    metrics_snapshot, log_snippet, diagnosis_status, diagnosis_result,
-   first_triggered_at, last_triggered_at, created_at, updated_at)
+   first_triggered_at, last_triggered_at, last_notified_at, created_at, updated_at)
 VALUES
   (
     1001,
@@ -58,6 +60,7 @@ VALUES
     ),
     NOW() - INTERVAL 4 MINUTE,
     NOW() - INTERVAL 1 MINUTE,
+    NULL,
     NOW() - INTERVAL 4 MINUTE,
     NOW() - INTERVAL 1 MINUTE
   )

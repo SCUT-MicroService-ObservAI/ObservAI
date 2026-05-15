@@ -64,6 +64,14 @@ public class AlertService {
         return saved;
     }
 
+    /**
+     * 对历史 Mock 或其它记录再次调用 AI；同步执行，便于接口返回后前端立即可见最新结果。
+     */
+    public void rediagnose(Long id) {
+        findAlert(id);
+        diagnosisService.runDiagnosis(id);
+    }
+
     AlertRecord findAlert(Long id) {
         return alertRepository.findById(id).orElseThrow(() -> new IllegalArgumentException("告警不存在"));
     }
@@ -92,6 +100,7 @@ public class AlertService {
     private AlertRecord updateDuplicated(AlertRecord alert, AlertCreateRequest request) {
         alert.setTriggerCount(alert.getTriggerCount() + 1);
         alert.setLastTriggeredAt(LocalDateTime.now());
+        alert.setSeverity(request.severity());
         alert.setMetricsSnapshot(request.metricsSnapshot());
         alert.setLogSnippet(request.logSnippet());
         return alertRepository.save(alert);

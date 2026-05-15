@@ -1,7 +1,10 @@
 <template>
   <div class="page-title">
     <h1>告警详情 #{{ id }}</h1>
-    <el-button @click="$router.push('/alerts')">返回</el-button>
+    <div class="page-actions">
+      <el-button @click="load">刷新</el-button>
+      <el-button @click="$router.push('/alerts')">返回</el-button>
+    </div>
   </div>
 
   <el-row :gutter="16" v-if="detail">
@@ -13,7 +16,12 @@
           <el-descriptions-item label="类型">{{ detail.alert.alertType }}</el-descriptions-item>
           <el-descriptions-item label="等级">{{ detail.alert.severity }}</el-descriptions-item>
           <el-descriptions-item label="状态">{{ detail.alert.status }}</el-descriptions-item>
-          <el-descriptions-item label="诊断">{{ detail.alert.diagnosisStatus }}</el-descriptions-item>
+          <el-descriptions-item label="诊断状态">{{ detail.alert.diagnosisStatus }}</el-descriptions-item>
+          <el-descriptions-item label="诊断来源">
+            <el-tag v-if="diagnosisSource === 'ALIYUN_AI'" type="success">通义 AI</el-tag>
+            <el-tag v-else-if="diagnosisSource === 'MOCK'" type="info">Mock 兜底</el-tag>
+            <span v-else>{{ diagnosisSource || '—' }}</span>
+          </el-descriptions-item>
           <el-descriptions-item label="触发次数">{{ detail.alert.triggerCount }}</el-descriptions-item>
         </el-descriptions>
       </div>
@@ -43,19 +51,52 @@
     <h2>异常日志</h2>
     <pre>{{ detail.alert.logSnippet || '-' }}</pre>
     <h2>AI 诊断</h2>
-    <pre>{{ detail.alert.diagnosisResult || '诊断任务尚未完成' }}</pre>
+    <div class="diagnosis-toolbar">
+      <el-button type="primary" plain :loading="rediagnoseLoading" @click="onRediagnose">
+        用 AI 重新诊断
+      </el-button>
+      <span class="hint">历史 Mock 或需更新结论时可点此重跑（约需数十秒，请勿关闭页面）。</span>
+    </div>
+    <pre>{{ diagnosisResultText }}</pre>
   </div>
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { fetchAlertDetail, updateAlertStatus } from '../api/observai'
+import { fetchAlertDetail, rediagnoseAlert, updateAlertStatus } from '../api/observai'
 
 const props = defineProps({ id: String })
 const statuses = ['UNHANDLED', 'PROCESSING', 'RESOLVED', 'IGNORED', 'FALSE_ALARM', 'RECOVERED']
 const detail = ref(null)
 const statusForm = reactive({ status: 'PROCESSING', remark: '' })
+const rediagnoseLoading = ref(false)
+
+const diagnosisSource = computed(() => {
+  const r = detail.value?.alert?.diagnosisResult
+  if (!r) return ''
+  if (typeof r === 'object' && r.source) return r.source
+  if (typeof r === 'string') {
+    try {
+      const o = JSON.parse(r)
+      return o.source || ''
+    } catch {
+      return ''
+    }
+  }
+  return ''
+})
+
+const diagnosisResultText = computed(() => {
+  const r = detail.value?.alert?.diagnosisResult
+  if (r == null) return '诊断任务尚未完成'
+  if (typeof r === 'string') return r
+  try {
+    return JSON.stringify(r, null, 2)
+  } catch {
+    return String(r)
+  }
+})
 
 async function load() {
   const res = await fetchAlertDetail(props.id)
@@ -69,10 +110,50 @@ async function saveStatus() {
   load()
 }
 
+async function onRediagnose() {
+  rediagnoseLoading.value = true
+  try {
+    await rediagnoseAlert(props.id)
+    await load()
+    ElMessage.success('重新诊断已完成')
+  } catch (e) {
+    const msg = e?.response?.data?.message || e?.message || '请求失败'
+    ElMessage.error(msg)
+  } finally {
+    rediagnoseLoading.value = false
+  }
+}
+
 onMounted(load)
 </script>
 
 <style scoped>
+.page-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.page-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.diagnosis-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.diagnosis-toolbar .hint {
+  font-size: 13px;
+  color: #64748b;
+}
+
 .detail-section {
   margin-top: 16px;
 }

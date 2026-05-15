@@ -6,6 +6,8 @@ export const collectNow = () => http.post('/monitor/collect')
 export const fetchAlerts = (params) => http.get('/alerts', { params })
 export const fetchAlertDetail = (id) => http.get(`/alerts/${id}`)
 export const updateAlertStatus = (id, payload) => http.put(`/alerts/${id}/status`, payload)
+export const rediagnoseAlert = (id) =>
+  http.post(`/alerts/${id}/rediagnose`, null, { timeout: 120000 })
 export const fetchAlertRules = () => http.get('/alert-rules')
 export const createAlertRule = (payload) => http.post('/alert-rules', payload)
 export const updateAlertRule = (id, payload) => http.put(`/alert-rules/${id}`, payload)

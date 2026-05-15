@@ -34,6 +34,16 @@ public class AlertRepository {
         this.objectMapper = objectMapper;
     }
 
+    public void updateLastNotifiedAt(Long alertId, LocalDateTime at) {
+        LocalDateTime now = LocalDateTime.now();
+        jdbcTemplate.update(
+                "UPDATE alerts SET last_notified_at = ?, updated_at = ? WHERE alert_id = ?",
+                Timestamp.valueOf(at),
+                Timestamp.valueOf(now),
+                alertId
+        );
+    }
+
     public Optional<AlertRecord> findOpenByFingerprint(String fingerprint) {
         try {
             AlertRecord alert = jdbcTemplate.queryForObject(
@@ -115,8 +125,8 @@ public class AlertRepository {
                         INSERT INTO alerts
                           (service_name, alert_type, metric_name, severity, status, fingerprint,
                            trigger_count, metrics_snapshot, log_snippet, diagnosis_status, diagnosis_result,
-                           first_triggered_at, last_triggered_at, recovered_at, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                           first_triggered_at, last_triggered_at, last_notified_at, recovered_at, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         Statement.RETURN_GENERATED_KEYS
                 );
@@ -143,7 +153,7 @@ public class AlertRepository {
                 SET service_name = ?, alert_type = ?, metric_name = ?, severity = ?, status = ?,
                     fingerprint = ?, trigger_count = ?, metrics_snapshot = ?,
                     log_snippet = ?, diagnosis_status = ?, diagnosis_result = ?,
-                    first_triggered_at = ?, last_triggered_at = ?, recovered_at = ?, updated_at = ?
+                    first_triggered_at = ?, last_triggered_at = ?, last_notified_at = ?, recovered_at = ?, updated_at = ?
                 WHERE alert_id = ?
                 """,
                 alert.getServiceName(),
@@ -159,6 +169,7 @@ public class AlertRepository {
                 toJson(alert.getDiagnosisResult()),
                 alert.getFirstTriggeredAt(),
                 alert.getLastTriggeredAt(),
+                alert.getLastNotifiedAt() == null ? null : Timestamp.valueOf(alert.getLastNotifiedAt()),
                 alert.getRecoveredAt(),
                 alert.getUpdatedAt(),
                 alert.getAlertId()
@@ -180,13 +191,18 @@ public class AlertRepository {
         ps.setString(11, toJson(alert.getDiagnosisResult()));
         ps.setTimestamp(12, Timestamp.valueOf(alert.getFirstTriggeredAt()));
         ps.setTimestamp(13, Timestamp.valueOf(alert.getLastTriggeredAt()));
-        if (alert.getRecoveredAt() == null) {
+        if (alert.getLastNotifiedAt() == null) {
             ps.setNull(14, Types.TIMESTAMP);
         } else {
-            ps.setTimestamp(14, Timestamp.valueOf(alert.getRecoveredAt()));
+            ps.setTimestamp(14, Timestamp.valueOf(alert.getLastNotifiedAt()));
         }
-        ps.setTimestamp(15, Timestamp.valueOf(alert.getCreatedAt()));
-        ps.setTimestamp(16, Timestamp.valueOf(alert.getUpdatedAt()));
+        if (alert.getRecoveredAt() == null) {
+            ps.setNull(15, Types.TIMESTAMP);
+        } else {
+            ps.setTimestamp(15, Timestamp.valueOf(alert.getRecoveredAt()));
+        }
+        ps.setTimestamp(16, Timestamp.valueOf(alert.getCreatedAt()));
+        ps.setTimestamp(17, Timestamp.valueOf(alert.getUpdatedAt()));
     }
 
     private AlertRecord mapRow(ResultSet rs, int rowNum) throws SQLException {
@@ -205,6 +221,8 @@ public class AlertRepository {
         alert.setDiagnosisResult(fromJson(rs.getString("diagnosis_result"), DiagnosisResult.class));
         alert.setFirstTriggeredAt(rs.getTimestamp("first_triggered_at").toLocalDateTime());
         alert.setLastTriggeredAt(rs.getTimestamp("last_triggered_at").toLocalDateTime());
+        Timestamp lastNotified = rs.getTimestamp("last_notified_at");
+        alert.setLastNotifiedAt(lastNotified == null ? null : lastNotified.toLocalDateTime());
         Timestamp recoveredAt = rs.getTimestamp("recovered_at");
         alert.setRecoveredAt(recoveredAt == null ? null : recoveredAt.toLocalDateTime());
         alert.setCreatedAt(rs.getTimestamp("created_at").toLocalDateTime());

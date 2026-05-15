@@ -2,6 +2,7 @@ package com.observai.alert.service;
 
 import com.observai.alert.model.AlertRecord;
 import com.observai.alert.repository.AlertRepository;
+import java.time.LocalDateTime;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -18,6 +19,10 @@ public class AlertServiceAccessor {
 
     AlertRecord save(AlertRecord alert) {
         return repository.save(alert);
+    }
+
+    void updateLastNotifiedAt(Long alertId, LocalDateTime at) {
+        repository.updateLastNotifiedAt(alertId, at);
     }
 }
 

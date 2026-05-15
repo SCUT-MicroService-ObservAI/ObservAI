@@ -4,6 +4,9 @@ CREATE DATABASE IF NOT EXISTS observai
 
 USE observai;
 
+-- 保证 init 脚本里的中文 COMMENT / 字符串按 UTF-8 写入，避免首次导入出现乱码
+SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS users (
   user_id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键',
   username VARCHAR(100) NOT NULL UNIQUE COMMENT '用户名',
@@ -57,6 +60,7 @@ CREATE TABLE IF NOT EXISTS alerts (
   diagnosis_result JSON COMMENT 'AI 或 Mock 诊断结果',
   first_triggered_at DATETIME NOT NULL COMMENT '首次触发时间',
   last_triggered_at DATETIME NOT NULL COMMENT '最近触发时间',
+  last_notified_at DATETIME NULL COMMENT '上次已发送通知的时间；合并触发时不重复通知，供运维与后续抑制策略使用',
   recovered_at DATETIME NULL COMMENT '恢复时间',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
