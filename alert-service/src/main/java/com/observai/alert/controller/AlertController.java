@@ -51,4 +51,10 @@ public class AlertController {
     public ApiResponse<AlertRecord> updateStatus(@PathVariable("id") Long id, @Valid @RequestBody AlertStatusUpdateRequest request) {
         return ApiResponse.success(alertService.updateStatus(id, request));
     }
+
+    @PostMapping("/alerts/{id}/rediagnose")
+    public ApiResponse<Void> rediagnose(@PathVariable("id") Long id) {
+        alertService.rediagnose(id);
+        return ApiResponse.success();
+    }
 }
