@@ -76,7 +76,9 @@ public class DiagnosisService {
                     alert.getAlertType(),
                     alert.getSeverity(),
                     result.rootCause(),
-                    String.join("；", result.suggestionSteps())
+                    String.join("；", result.suggestionSteps()),
+                    alert.getStatus(),
+                    alert.getLastTriggeredAt()
             ));
             alertServiceAccessor.updateLastNotifiedAt(alert.getAlertId(), LocalDateTime.now());
         } catch (RuntimeException ignored) {
