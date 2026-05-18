@@ -1,5 +1,6 @@
 package com.observai.alert.service;
 
+import com.observai.alert.config.AlertProperties;
 import com.observai.alert.model.AlertDetail;
 import com.observai.alert.model.AlertRecord;
 import com.observai.alert.repository.AlertRepository;
@@ -18,12 +19,16 @@ public class AlertService {
     private final AlertRepository alertRepository;
     private final AlertStatusHistoryRepository historyRepository;
     private final DiagnosisService diagnosisService;
+    private final AlertProperties alertProperties;
 
-    public AlertService(AlertRepository alertRepository, AlertStatusHistoryRepository historyRepository,
-                        DiagnosisService diagnosisService) {
+    public AlertService(AlertRepository alertRepository,
+                        AlertStatusHistoryRepository historyRepository,
+                        DiagnosisService diagnosisService,
+                        AlertProperties alertProperties) {
         this.alertRepository = alertRepository;
         this.historyRepository = historyRepository;
         this.diagnosisService = diagnosisService;
+        this.alertProperties = alertProperties;
     }
 
     public AlertCreateResponse createOrUpdate(AlertCreateRequest request) {
@@ -33,7 +38,7 @@ public class AlertService {
                 .orElseGet(() -> createNew(request, fingerprint));
 
         boolean deduplicated = alert.getTriggerCount() > 1;
-        if (!deduplicated) {
+        if (!deduplicated || shouldNotifyAgain(alert)) {
             diagnosisService.diagnoseAsync(alert.getAlertId());
         }
 
@@ -58,22 +63,36 @@ public class AlertService {
     public AlertRecord updateStatus(Long id, AlertStatusUpdateRequest request) {
         AlertRecord alert = findAlert(id);
         AlertStatus from = alert.getStatus();
+        if (from == request.status()) {
+            return alert;
+        }
+
         alert.setStatus(request.status());
         AlertRecord saved = alertRepository.save(alert);
-        historyRepository.save(id, from, request.status(), request.operator(), request.remark());
+        historyRepository.save(id, from, request.status(), operatorOrSystem(request.operator()), request.remark());
         return saved;
     }
 
-    /**
-     * 对历史 Mock 或其它记录再次调用 AI；同步执行，便于接口返回后前端立即可见最新结果。
-     */
+    public AlertRecord markRecovered(Long id) {
+        AlertRecord alert = findAlert(id);
+        AlertStatus from = alert.getStatus();
+        if (from == AlertStatus.RECOVERED) {
+            return alert;
+        }
+
+        alert.setStatus(AlertStatus.RECOVERED);
+        AlertRecord saved = alertRepository.save(alert);
+        historyRepository.save(id, from, AlertStatus.RECOVERED, "system", "system recovery detected");
+        return saved;
+    }
+
     public void rediagnose(Long id) {
         findAlert(id);
         diagnosisService.runDiagnosis(id);
     }
 
     AlertRecord findAlert(Long id) {
-        return alertRepository.findById(id).orElseThrow(() -> new IllegalArgumentException("告警不存在"));
+        return alertRepository.findById(id).orElseThrow(() -> new IllegalArgumentException("alert not found"));
     }
 
     AlertRecord save(AlertRecord alert) {
@@ -93,7 +112,7 @@ public class AlertService {
         alert.setLogSnippet(request.logSnippet());
         alert.setDiagnosisStatus(DiagnosisStatus.PENDING);
         AlertRecord saved = alertRepository.save(alert);
-        historyRepository.save(saved.getAlertId(), null, AlertStatus.UNHANDLED, "system", "告警首次创建");
+        historyRepository.save(saved.getAlertId(), null, AlertStatus.UNHANDLED, "system", "alert created");
         return saved;
     }
 
@@ -109,5 +128,17 @@ public class AlertService {
     private String fingerprint(String serviceName, String alertType, String metricName) {
         return serviceName + ":" + alertType + ":" + metricName;
     }
-}
 
+    private boolean shouldNotifyAgain(AlertRecord alert) {
+        int minutes = alertProperties.getNotificationSuppressionMinutes();
+        if (minutes <= 0) {
+            return true;
+        }
+        LocalDateTime lastNotifiedAt = alert.getLastNotifiedAt();
+        return lastNotifiedAt == null || !lastNotifiedAt.plusMinutes(minutes).isAfter(LocalDateTime.now());
+    }
+
+    private String operatorOrSystem(String operator) {
+        return operator == null || operator.isBlank() ? "system" : operator;
+    }
+}

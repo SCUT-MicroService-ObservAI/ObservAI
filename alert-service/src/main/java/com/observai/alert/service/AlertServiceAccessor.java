@@ -14,7 +14,7 @@ public class AlertServiceAccessor {
     }
 
     AlertRecord find(Long alertId) {
-        return repository.findById(alertId).orElseThrow(() -> new IllegalArgumentException("告警不存在"));
+        return repository.findById(alertId).orElseThrow(() -> new IllegalArgumentException("alert not found"));
     }
 
     AlertRecord save(AlertRecord alert) {
@@ -25,4 +25,3 @@ public class AlertServiceAccessor {
         repository.updateLastNotifiedAt(alertId, at);
     }
 }
-

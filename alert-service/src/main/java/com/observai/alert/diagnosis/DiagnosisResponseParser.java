@@ -23,10 +23,10 @@ public class DiagnosisResponseParser {
             JsonNode node = objectMapper.readTree(stripMarkdown(raw));
             return new DiagnosisResult(
                     text(node, "faultType", defaultFaultType(alert)),
-                    text(node, "rootCause", alert.getServiceName() + " 发生异常，需进一步排查。"),
+                    text(node, "rootCause", alert.getServiceName() + " is abnormal and needs investigation."),
                     stringList(node.get("impactScope"), List.of(alert.getServiceName())),
                     stringList(node.get("suggestionSteps"), defaultSuggestions()),
-                    text(node, "rollbackSuggestion", "若异常与最近发布相关，建议回滚到上一稳定版本。"),
+                    text(node, "rollbackSuggestion", "If related to a recent release, roll back to the last stable version."),
                     parseSeverity(node.get("severity"), alert.getSeverity()),
                     parseConfidence(node.get("confidence")),
                     parseBoolean(node.get("needManualHandle"), true),
@@ -109,14 +109,18 @@ public class DiagnosisResponseParser {
 
     private String defaultFaultType(AlertRecord alert) {
         return switch (alert.getAlertType()) {
-            case "ERROR_RATE_HIGH" -> "接口错误率过高";
-            case "RESPONSE_TIME_HIGH" -> "接口响应时间过高";
-            case "SERVICE_DOWN" -> "服务不可用";
-            default -> "指标异常";
+            case "ERROR_RATE_HIGH" -> "High error rate";
+            case "RESPONSE_TIME_HIGH" -> "High response time";
+            case "SERVICE_DOWN" -> "Service unavailable";
+            default -> "Metric anomaly";
         };
     }
 
     private List<String> defaultSuggestions() {
-        return List.of("检查异常日志片段", "确认依赖服务和数据库连接", "核对最近发布或配置变更");
+        return List.of(
+                "Check the latest abnormal log snippets",
+                "Verify dependent services and database connectivity",
+                "Review recent deployments or configuration changes"
+        );
     }
 }

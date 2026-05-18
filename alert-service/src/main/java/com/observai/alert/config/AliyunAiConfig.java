@@ -8,7 +8,7 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
 @Configuration
-@EnableConfigurationProperties(AliyunAiProperties.class)
+@EnableConfigurationProperties({AliyunAiProperties.class, AlertProperties.class})
 public class AliyunAiConfig {
     @Bean
     RestClient aliyunAiRestClient(AliyunAiProperties properties) {

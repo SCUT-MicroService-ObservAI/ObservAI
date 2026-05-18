@@ -37,17 +37,11 @@ public class DiagnosisService {
         this.responseParser = responseParser;
     }
 
-    /**
-     * 新告警创建后异步诊断，不阻塞上报接口。
-     */
     @Async("diagnosisExecutor")
     public void diagnoseAsync(Long alertId) {
         runDiagnosis(alertId);
     }
 
-    /**
-     * 同步执行诊断（用于「重新诊断」接口，避免客户端已返回但异步尚未落库）。
-     */
     public void runDiagnosis(Long alertId) {
         AlertRecord alert = alertServiceAccessor.find(alertId);
         alert.setDiagnosisStatus(DiagnosisStatus.RUNNING);
@@ -76,26 +70,31 @@ public class DiagnosisService {
                     alert.getAlertType(),
                     alert.getSeverity(),
                     result.rootCause(),
-                    String.join("；", result.suggestionSteps())
+                    String.join("; ", result.suggestionSteps())
             ));
             alertServiceAccessor.updateLastNotifiedAt(alert.getAlertId(), LocalDateTime.now());
-        } catch (RuntimeException ignored) {
-            // 通知失败不能影响告警与诊断主流程。
+        } catch (RuntimeException ex) {
+            log.warn("Notification dispatch failed for alert {}: {}", alertId, ex.toString());
         }
     }
 
     private DiagnosisResult mockDiagnosis(AlertRecord alert) {
         return new DiagnosisResult(
                 switch (alert.getAlertType()) {
-                    case "ERROR_RATE_HIGH" -> "接口错误率过高";
-                    case "RESPONSE_TIME_HIGH" -> "接口响应时间过高";
-                    case "SERVICE_DOWN" -> "服务不可用";
-                    default -> "指标异常";
+                    case "ERROR_RATE_HIGH" -> "High error rate";
+                    case "RESPONSE_TIME_HIGH" -> "High response time";
+                    case "SERVICE_DOWN" -> "Service unavailable";
+                    default -> "Metric anomaly";
                 },
-                alert.getServiceName() + " 指标 " + alert.getMetricName() + " 触发阈值，需结合日志和近期变更排查。",
+                alert.getServiceName() + " metric " + alert.getMetricName()
+                        + " crossed the threshold. Check logs, dependencies, and recent changes.",
                 List.of(alert.getServiceName()),
-                List.of("检查异常日志片段", "确认依赖服务和数据库连接", "核对最近发布或配置变更"),
-                "若异常与最近发布强相关，建议回滚到上一稳定版本。",
+                List.of(
+                        "Check the latest abnormal log snippets",
+                        "Verify dependent services and database connectivity",
+                        "Review recent deployments or configuration changes"
+                ),
+                "If the anomaly correlates with a recent release, roll back to the last stable version.",
                 alert.getSeverity(),
                 0.72,
                 true,

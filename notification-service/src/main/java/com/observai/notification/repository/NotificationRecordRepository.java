@@ -58,6 +58,20 @@ public class NotificationRecordRepository {
         return record;
     }
 
+    public void updateStatus(Long id, NotificationStatus status, String errorMessage, LocalDateTime sentAt) {
+        jdbcTemplate.update(
+                """
+                UPDATE notification_record
+                SET status = ?, error_message = ?, sent_at = ?
+                WHERE id = ?
+                """,
+                status.name(),
+                errorMessage,
+                sentAt == null ? null : Timestamp.valueOf(sentAt),
+                id
+        );
+    }
+
     public List<NotificationRecord> find(Long alertId, String email, NotificationStatus status,
                                          LocalDateTime startTime, LocalDateTime endTime) {
         StringBuilder sql = new StringBuilder(

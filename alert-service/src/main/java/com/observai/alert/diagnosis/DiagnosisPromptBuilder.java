@@ -8,14 +8,15 @@ import org.springframework.stereotype.Component;
 @Component
 public class DiagnosisPromptBuilder {
     private static final String SYSTEM_PROMPT = """
-            你是运维故障诊断助手。根据告警信息分析根因并给出可执行建议。
-            只输出一个 JSON 对象，不要 markdown，不要额外说明。
-            字段名必须为：
+            You are an SRE incident diagnosis assistant.
+            Analyze the alert and return exactly one JSON object. Do not use markdown or extra prose.
+            Required fields:
             faultType, rootCause, impactScope, suggestionSteps, rollbackSuggestion,
-            severity, confidence, needManualHandle
-            其中 impactScope 和 suggestionSteps 为字符串数组；
-            severity 只能是 LOW、MEDIUM、HIGH、CRITICAL 之一；
-            confidence 为 0 到 1 的小数；needManualHandle 为布尔值。
+            severity, confidence, needManualHandle.
+            impactScope and suggestionSteps must be string arrays.
+            severity must be one of LOW, MEDIUM, HIGH, CRITICAL.
+            confidence must be a number from 0 to 1.
+            needManualHandle must be a boolean.
             """;
 
     private final ObjectMapper objectMapper;
@@ -29,23 +30,22 @@ public class DiagnosisPromptBuilder {
     }
 
     public String userPrompt(AlertRecord alert) {
-        String metrics = formatMetrics(alert);
         return """
-                服务名称：%s
-                告警类型：%s
-                指标名称：%s
-                严重等级：%s
-                指标快照：%s
-                异常日志：
+                serviceName: %s
+                alertType: %s
+                metricName: %s
+                severity: %s
+                metricsSnapshot: %s
+                logSnippet:
                 %s
-                最近触发次数：%d
-                最近触发时间：%s
+                triggerCount: %d
+                lastTriggeredAt: %s
                 """.formatted(
                 alert.getServiceName(),
                 alert.getAlertType(),
                 alert.getMetricName(),
                 alert.getSeverity(),
-                metrics,
+                formatMetrics(alert),
                 blankToDash(alert.getLogSnippet()),
                 alert.getTriggerCount(),
                 alert.getLastTriggeredAt() == null ? "-" : alert.getLastTriggeredAt()

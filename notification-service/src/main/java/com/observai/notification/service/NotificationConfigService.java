@@ -23,7 +23,8 @@ public class NotificationConfigService {
     }
 
     public NotificationConfig update(Long id, NotificationConfig input) {
-        NotificationConfig config = repository.findById(id).orElseThrow(() -> new IllegalArgumentException("通知配置不存在"));
+        NotificationConfig config = repository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("notification config not found"));
         config.setEmail(input.getEmail());
         config.setMinSeverity(input.getMinSeverity());
         config.setEnabled(input.isEnabled());
@@ -31,7 +32,8 @@ public class NotificationConfigService {
     }
 
     public NotificationConfig setEnabled(Long id, boolean enabled) {
-        NotificationConfig config = repository.findById(id).orElseThrow(() -> new IllegalArgumentException("通知配置不存在"));
+        NotificationConfig config = repository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("notification config not found"));
         config.setEnabled(enabled);
         return repository.save(config);
     }
@@ -40,4 +42,3 @@ public class NotificationConfigService {
         repository.delete(id);
     }
 }
-

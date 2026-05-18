@@ -15,6 +15,8 @@ spring:
         server-addr: ${NACOS_ADDR:localhost:8848}
 
 observai:
+  alert:
+    notification-suppression-minutes: ${ALERT_NOTIFICATION_SUPPRESSION_MINUTES:30}
   aliyun-ai:
     api-key: ${ALIYUN_AI_API_KEY:}
     base-url: https://dashscope.aliyuncs.com/compatible-mode/v1

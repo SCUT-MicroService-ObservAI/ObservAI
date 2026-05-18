@@ -14,31 +14,43 @@
         <el-descriptions :column="1" border>
           <el-descriptions-item label="服务">{{ detail.alert.serviceName }}</el-descriptions-item>
           <el-descriptions-item label="类型">{{ detail.alert.alertType }}</el-descriptions-item>
-          <el-descriptions-item label="等级">{{ detail.alert.severity }}</el-descriptions-item>
-          <el-descriptions-item label="状态">{{ detail.alert.status }}</el-descriptions-item>
+          <el-descriptions-item label="指标">{{ detail.alert.metricName }}</el-descriptions-item>
+          <el-descriptions-item label="等级">
+            <el-tag :type="severityTag(detail.alert.severity)">{{ detail.alert.severity }}</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="状态">
+            <el-tag :type="statusTag(detail.alert.status)">{{ detail.alert.status }}</el-tag>
+          </el-descriptions-item>
           <el-descriptions-item label="诊断状态">{{ detail.alert.diagnosisStatus }}</el-descriptions-item>
           <el-descriptions-item label="诊断来源">
-            <el-tag v-if="diagnosisSource === 'ALIYUN_AI'" type="success">通义 AI</el-tag>
+            <el-tag v-if="diagnosisSource === 'ALIYUN_AI'" type="success">阿里云 AI</el-tag>
             <el-tag v-else-if="diagnosisSource === 'MOCK'" type="info">Mock 兜底</el-tag>
-            <span v-else>{{ diagnosisSource || '—' }}</span>
+            <span v-else>{{ diagnosisSource || '-' }}</span>
           </el-descriptions-item>
           <el-descriptions-item label="触发次数">{{ detail.alert.triggerCount }}</el-descriptions-item>
+          <el-descriptions-item label="首次触发">{{ detail.alert.firstTriggeredAt }}</el-descriptions-item>
+          <el-descriptions-item label="最近触发">{{ detail.alert.lastTriggeredAt }}</el-descriptions-item>
+          <el-descriptions-item label="最近通知">{{ detail.alert.lastNotifiedAt || '-' }}</el-descriptions-item>
         </el-descriptions>
       </div>
     </el-col>
+
     <el-col :xs="24" :lg="12">
       <div class="panel">
         <h2>处理状态</h2>
-        <div class="toolbar">
-          <el-select v-model="statusForm.status" style="width: 180px">
+        <div class="toolbar status-toolbar">
+          <el-select v-model="statusForm.status" class="status-select">
             <el-option v-for="item in statuses" :key="item" :label="item" :value="item" />
           </el-select>
           <el-input v-model="statusForm.remark" placeholder="备注" />
           <el-button type="primary" @click="saveStatus">保存</el-button>
+          <el-button type="success" plain @click="markRecovered">系统恢复</el-button>
         </div>
         <el-timeline>
           <el-timeline-item v-for="item in detail.statusHistory" :key="item.id" :timestamp="item.createdAt">
-            {{ item.fromStatus || '-' }} → {{ item.toStatus }}，{{ item.remark || '无备注' }}
+            <strong>{{ item.fromStatus || '-' }} -> {{ item.toStatus }}</strong>
+            <span class="history-meta"> {{ item.operator || 'system' }}</span>
+            <div class="history-remark">{{ item.remark || '无备注' }}</div>
           </el-timeline-item>
         </el-timeline>
       </div>
@@ -47,15 +59,15 @@
 
   <div class="panel detail-section" v-if="detail">
     <h2>指标快照</h2>
-    <pre>{{ detail.alert.metricsSnapshot }}</pre>
+    <pre>{{ metricsText }}</pre>
     <h2>异常日志</h2>
     <pre>{{ detail.alert.logSnippet || '-' }}</pre>
     <h2>AI 诊断</h2>
     <div class="diagnosis-toolbar">
       <el-button type="primary" plain :loading="rediagnoseLoading" @click="onRediagnose">
-        用 AI 重新诊断
+        重新诊断
       </el-button>
-      <span class="hint">历史 Mock 或需更新结论时可点此重跑（约需数十秒，请勿关闭页面）。</span>
+      <span class="hint">诊断失败、超时或格式异常时会保存 Mock 兜底结果。</span>
     </div>
     <pre>{{ diagnosisResultText }}</pre>
   </div>
@@ -64,12 +76,12 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { fetchAlertDetail, rediagnoseAlert, updateAlertStatus } from '../api/observai'
+import { fetchAlertDetail, recoverAlert, rediagnoseAlert, updateAlertStatus } from '../api/observai'
 
 const props = defineProps({ id: String })
 const statuses = ['UNHANDLED', 'PROCESSING', 'RESOLVED', 'IGNORED', 'FALSE_ALARM', 'RECOVERED']
 const detail = ref(null)
-const statusForm = reactive({ status: 'PROCESSING', remark: '' })
+const statusForm = reactive({ status: 'PROCESSING', remark: '', operator: 'user' })
 const rediagnoseLoading = ref(false)
 
 const diagnosisSource = computed(() => {
@@ -78,8 +90,7 @@ const diagnosisSource = computed(() => {
   if (typeof r === 'object' && r.source) return r.source
   if (typeof r === 'string') {
     try {
-      const o = JSON.parse(r)
-      return o.source || ''
+      return JSON.parse(r).source || ''
     } catch {
       return ''
     }
@@ -91,23 +102,33 @@ const diagnosisResultText = computed(() => {
   const r = detail.value?.alert?.diagnosisResult
   if (r == null) return '诊断任务尚未完成'
   if (typeof r === 'string') return r
-  try {
-    return JSON.stringify(r, null, 2)
-  } catch {
-    return String(r)
-  }
+  return JSON.stringify(r, null, 2)
+})
+
+const metricsText = computed(() => {
+  const metrics = detail.value?.alert?.metricsSnapshot
+  if (!metrics) return '-'
+  if (typeof metrics === 'string') return metrics
+  return JSON.stringify(metrics, null, 2)
 })
 
 async function load() {
   const res = await fetchAlertDetail(props.id)
   detail.value = res.data
   statusForm.status = detail.value.alert.status
+  statusForm.remark = ''
 }
 
 async function saveStatus() {
   await updateAlertStatus(props.id, statusForm)
   ElMessage.success('状态已更新')
-  load()
+  await load()
+}
+
+async function markRecovered() {
+  await recoverAlert(props.id)
+  ElMessage.success('已标记为恢复')
+  await load()
 }
 
 async function onRediagnose() {
@@ -124,6 +145,26 @@ async function onRediagnose() {
   }
 }
 
+function severityTag(severity) {
+  return {
+    LOW: 'info',
+    MEDIUM: 'warning',
+    HIGH: 'danger',
+    CRITICAL: 'danger'
+  }[severity] || ''
+}
+
+function statusTag(status) {
+  return {
+    UNHANDLED: 'danger',
+    PROCESSING: 'warning',
+    RESOLVED: 'success',
+    IGNORED: 'info',
+    FALSE_ALARM: 'info',
+    RECOVERED: 'success'
+  }[status] || ''
+}
+
 onMounted(load)
 </script>
 
@@ -136,17 +177,31 @@ onMounted(load)
   gap: 8px;
 }
 
-.page-actions {
-  display: flex;
-  gap: 8px;
-}
-
+.page-actions,
+.status-toolbar,
 .diagnosis-toolbar {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 8px;
+  gap: 8px;
   flex-wrap: wrap;
+}
+
+.status-select {
+  width: 180px;
+}
+
+.history-meta {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.history-remark {
+  margin-top: 4px;
+  color: #334155;
+}
+
+.diagnosis-toolbar {
+  margin-bottom: 8px;
 }
 
 .diagnosis-toolbar .hint {
@@ -166,4 +221,3 @@ pre {
   padding: 12px;
 }
 </style>
-
